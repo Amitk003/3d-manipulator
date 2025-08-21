@@ -28,6 +28,7 @@ let currentGesture = null;
 let renderer, scene, camera, object3d, light;
 initThree();
 createObject('cube');
+updateActiveButton('cube');
 animateThree();
 
 // responsive overlay
@@ -46,25 +47,49 @@ window.addEventListener('resize', resizeCanvases);
 function initThree() {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
   threeContainer.appendChild(renderer.domElement);
 
   scene = new THREE.Scene();
+  scene.background = null; // transparent background
 
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
   camera.position.set(0, 0, 6);
 
-  light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(5, 5, 10);
+  // Enhanced lighting setup
+  light = new THREE.DirectionalLight(0x4dd0e1, 1.5);
+  light.position.set(5, 10, 10);
+  light.castShadow = true;
+  light.shadow.mapSize.width = 2048;
+  light.shadow.mapSize.height = 2048;
+  light.shadow.camera.near = 0.5;
+  light.shadow.camera.far = 50;
   scene.add(light);
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  const ambient = new THREE.AmbientLight(0x4dd0e1, 0.3);
   scene.add(ambient);
 
-  // sky / subtle ground plane
-  const grid = new THREE.GridHelper(20, 20, 0x0a0a0a, 0x071426);
-  grid.material.opacity = 0.08;
+  // Add point lights for better illumination
+  const pointLight1 = new THREE.PointLight(0x06b6d4, 0.8, 20);
+  pointLight1.position.set(-5, 5, 5);
+  scene.add(pointLight1);
+
+  const pointLight2 = new THREE.PointLight(0x67e8f9, 0.6, 20);
+  pointLight2.position.set(5, -5, 5);
+  scene.add(pointLight2);
+
+  // Enhanced ground plane with better grid
+  const grid = new THREE.GridHelper(20, 20, 0x06b6d4, 0x0a4d5a);
+  grid.material.opacity = 0.1;
   grid.material.transparent = true;
   scene.add(grid);
+
+  // Add a subtle fog effect
+  scene.fog = new THREE.Fog(0x071024, 15, 25);
 
   // initial size
   const rect = threeContainer.getBoundingClientRect();
@@ -81,12 +106,25 @@ function createObject(type) {
   else if (type === 'sphere') geo = new THREE.SphereGeometry(0.9, 32, 32);
   else geo = new THREE.TorusKnotGeometry(0.6, 0.18, 120, 16);
 
-  const mat = new THREE.MeshStandardMaterial({ color: 0x4dd0e1, metalness: 0.25, roughness: 0.4 });
+  // Enhanced materials with better visual properties
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x4dd0e1,
+    metalness: 0.4,
+    roughness: 0.2,
+    envMapIntensity: 1.0,
+    transparent: true,
+    opacity: 0.9
+  });
+
   object3d = new THREE.Mesh(geo, mat);
   object3d.castShadow = true;
+  object3d.receiveShadow = true;
   scene.add(object3d);
   object3d.position.set(0, 0, 0);
   object3d.rotation.set(0.2, 0.4, 0);
+
+  // Add subtle animation
+  object3d.userData.rotationSpeed = 0.005;
 
   // store default
   object3d.userData.default = {
@@ -103,9 +141,25 @@ function animateThree() {
 }
 
 // UI
-btnCube.addEventListener('click', () => createObject('cube'));
-btnSphere.addEventListener('click', () => createObject('sphere'));
-btnTorus.addEventListener('click', () => createObject('torus'));
+function updateActiveButton(type) {
+  [btnCube, btnSphere, btnTorus].forEach(btn => btn.classList.remove('active'));
+  if (type === 'cube') btnCube.classList.add('active');
+  else if (type === 'sphere') btnSphere.classList.add('active');
+  else if (type === 'torus') btnTorus.classList.add('active');
+}
+
+btnCube.addEventListener('click', () => {
+  createObject('cube');
+  updateActiveButton('cube');
+});
+btnSphere.addEventListener('click', () => {
+  createObject('sphere');
+  updateActiveButton('sphere');
+});
+btnTorus.addEventListener('click', () => {
+  createObject('torus');
+  updateActiveButton('torus');
+});
 btnReset.addEventListener('click', () => {
   if (!object3d) return;
   const d = object3d.userData.default;
@@ -116,6 +170,11 @@ btnReset.addEventListener('click', () => {
 
 toggleVideo.addEventListener('change', (e) => {
   video.style.display = e.target.checked ? 'block' : 'none';
+  // Also adjust opacity for better integration
+  if (e.target.checked) {
+    video.style.opacity = '0.8';
+    video.style.filter = 'blur(0.5px)';
+  }
 });
 
 // load MediaPipe script(s)
@@ -173,8 +232,10 @@ async function startCamera() {
     mpCamera.start();
 
     statusEl.textContent = 'Status: Camera started — show your palm';
-    toggleVideo.checked = false;
-    video.style.display = 'none';
+    toggleVideo.checked = true;
+    video.style.display = 'block';
+    video.style.opacity = '0.8';
+    video.style.filter = 'blur(0.5px)';
     resizeCanvases();
   } catch (err) {
     console.error(err);
