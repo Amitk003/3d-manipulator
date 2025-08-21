@@ -23,6 +23,8 @@ let cameraUtils = null;
 let cameraReady = false;
 let lastPinchDistance = null;
 let currentGesture = null;
+let isGrabbed = false;
+let grabbedPosition = null;
 
 // THREE.JS scene
 let renderer, scene, camera, object3d, light;
@@ -324,6 +326,27 @@ function palmAngle(landmarks) {
   return Math.atan2(vy, vx); // radians
 }
 
+// calculate palm openness based on finger distances from palm center
+function calculatePalmOpenness(landmarks) {
+  const palmCenter = palmCenter(landmarks);
+
+  // Calculate distances of fingertips from palm center
+  const fingertips = [4, 8, 12, 16, 20]; // thumb, index, middle, ring, pinky tips
+  let totalDistance = 0;
+
+  for (const tipIndex of fingertips) {
+    const tip = landmarks[tipIndex];
+    const distance = Math.hypot(tip.x - palmCenter.x, tip.y - palmCenter.y);
+    totalDistance += distance;
+  }
+
+  const avgDistance = totalDistance / fingertips.length;
+
+  // Normalize the distance (higher value = more open palm)
+  // Typical range: 0.15 (closed) to 0.35 (open)
+  return Math.min(Math.max(avgDistance, 0), 0.5);
+}
+
 // handle MediaPipe results
 function onHandsResults(results) {
   if (!results.multiHandLandmarks || !results.multiHandLandmarks.length) {
@@ -332,20 +355,47 @@ function onHandsResults(results) {
     lastPinchDistance = null;
     return;
   }
-  statusEl.textContent = 'Status: Hand detected';
-  const lm = results.multiHandLandmarks[0];
 
+  const lm = results.multiHandLandmarks[0];
   drawSkeleton(lm);
 
-  // palm center -> move object
-  const pcenter = palmCenter(lm);
-  const worldPos = normalizedToWorld(pcenter.x, pcenter.y);
-  if (object3d) {
-    // smooth follow
-    object3d.position.lerp(worldPos, 0.18);
+  // Calculate palm openness for grab detection
+  const palmOpenness = calculatePalmOpenness(lm);
+
+  // Grab/Release detection
+  const GRAB_THRESHOLD = 0.22; // Lower values = more closed palm
+
+  if (palmOpenness < GRAB_THRESHOLD && !isGrabbed) {
+    // Grab the object
+    isGrabbed = true;
+    grabbedPosition = object3d.position.clone();
+    object3d.material.color.setHex(0xff6b6b); // Red color when grabbed
+    statusEl.textContent = 'Status: Object grabbed - Move your hand to move object';
+  } else if (palmOpenness > GRAB_THRESHOLD + 0.05 && isGrabbed) {
+    // Release the object
+    isGrabbed = false;
+    grabbedPosition = null;
+    object3d.material.color.setHex(0x4dd0e1); // Back to cyan
+    statusEl.textContent = 'Status: Object released - Object stays in place';
+  } else if (!isGrabbed) {
+    statusEl.textContent = 'Status: Hand detected - Close palm to grab object';
   }
 
-  // pinch detection (thumb tip 4, index tip 8)
+  // Object movement logic
+  const pcenter = palmCenter(lm);
+  const worldPos = normalizedToWorld(pcenter.x, pcenter.y);
+
+  if (object3d) {
+    if (isGrabbed) {
+      // When grabbed, object follows hand exactly
+      object3d.position.copy(worldPos);
+    } else {
+      // When not grabbed, smooth follow (original behavior)
+      object3d.position.lerp(worldPos, 0.18);
+    }
+  }
+
+  // pinch detection (thumb tip 4, index tip 8) - only when not grabbed
   const thumb = lm[4], index = lm[8];
   const dx = thumb.x - index.x;
   const dy = thumb.y - index.y;
@@ -355,9 +405,9 @@ function onHandsResults(results) {
   if (lastPinchDistance === null) lastPinchDistance = pinchDist;
   const pinchDelta = pinchDist - lastPinchDistance;
 
-  // if fingers are close enough -> "pinch active"
+  // if fingers are close enough -> "pinch active" (only when not grabbed)
   const PINCH_THRESHOLD = 0.05;
-  if (pinchDist < 0.08) {
+  if (pinchDist < 0.08 && !isGrabbed) {
     // small distance => tight pinch — start scaling based on movement
     currentGesture = 'pinch';
   } else {
@@ -365,7 +415,7 @@ function onHandsResults(results) {
   }
 
   // scale object while pinch active: compare distance changes across frames (use absolute distance mapping)
-  if (object3d) {
+  if (object3d && currentGesture === 'pinch') {
     // compute scaling factor from thumb-index absolute distance (invert: bigger distance => larger scale)
     const scaleBase = THREE.MathUtils.clamp((pinchDist * 6.0), 0.3, 3.5);
     // smooth scale
