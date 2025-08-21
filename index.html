@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>3D Palm Shape Manipulator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div id="app">
+    <header>
+      <h1>3D Shape Manipulator — Palm Skeleton Control</h1>
+      <div class="controls" role="region" aria-label="controls">
+        <button id="shape-cube" class="btn">Cube</button>
+        <button id="shape-sphere" class="btn">Sphere</button>
+        <button id="shape-torus" class="btn">Torus</button>
+        <button id="reset" class="btn">Reset</button>
+        <label class="toggle">
+          <input id="toggle-video" type="checkbox" />
+          Show Camera
+        </label>
+      </div>
+    </header>
+
+    <main>
+      <div id="preview">
+        <!-- video from webcam (hidden by default) -->
+        <video id="video" playsinline autoplay muted></video>
+        <!-- overlay canvas for drawing white skeleton -->
+        <canvas id="overlay"></canvas>
+        <!-- three.js canvas is automatically created by the script in #three-container -->
+        <div id="three-container"></div>
+      </div>
+
+      <aside id="instructions">
+        <h2>How to use</h2>
+        <ol>
+          <li>Allow camera access when prompted.</li>
+          <li>Make sure your palm is visible and facing the camera.</li>
+          <li>Move palm to move the 3D shape.</li>
+          <li>Pinch (thumb + index tip) and move fingers closer/farther to scale.</li>
+          <li>Rotate your palm to rotate the shape.</li>
+        </ol>
+        <p class="status" id="status">Status: waiting for camera...</p>
+      </aside>
+    </main>
+
+    <footer>
+      <small>Works offline after initial load. Built with MediaPipe Hands + Three.js</small>
+    </footer>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+
+</html>
