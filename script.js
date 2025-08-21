@@ -25,6 +25,8 @@ let lastPinchDistance = null;
 let currentGesture = null;
 let isGrabbed = false;
 let grabbedPosition = null;
+let particles = [];
+let gestureTrail = [];
 
 // THREE.JS scene
 let renderer, scene, camera, object3d, light;
@@ -139,6 +141,15 @@ function createObject(type) {
 // animation loop
 function animateThree() {
   requestAnimationFrame(animateThree);
+
+  // Update particles
+  updateParticles();
+
+  // Subtle object rotation when not grabbed
+  if (object3d && !isGrabbed) {
+    object3d.rotation.y += object3d.userData.rotationSpeed;
+  }
+
   renderer.render(scene, camera);
 }
 
@@ -267,6 +278,16 @@ function drawSkeleton(landmarks) {
 
   if (!landmarks) return;
 
+  // Draw gesture trail first (so it appears behind the skeleton)
+  if (isGrabbed) {
+    const pcenter = palmCenter(landmarks);
+    const worldPos = normalizedToWorld(pcenter.x, pcenter.y);
+    updateGestureTrail(worldPos);
+    drawGestureTrail();
+  } else {
+    gestureTrail = []; // Clear trail when not grabbed
+  }
+
   overlayCtx.lineWidth = 2.6;
   overlayCtx.strokeStyle = 'white';
   overlayCtx.fillStyle = 'rgba(255,255,255,0.02)';
@@ -347,6 +368,115 @@ function calculatePalmOpenness(landmarks) {
   return Math.min(Math.max(avgDistance, 0), 0.5);
 }
 
+// Create particle effects
+function createParticles(position, color = 0x4dd0e1, count = 20) {
+  for (let i = 0; i < count; i++) {
+    const particle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.02, 8, 8),
+      new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.8 })
+    );
+
+    particle.position.copy(position);
+    particle.userData.velocity = new THREE.Vector3(
+      (Math.random() - 0.5) * 0.2,
+      (Math.random() - 0.5) * 0.2,
+      (Math.random() - 0.5) * 0.2
+    );
+    particle.userData.lifetime = 60; // frames
+    particle.userData.gravity = 0.005;
+
+    scene.add(particle);
+    particles.push(particle);
+  }
+}
+
+// Create gesture trail effect
+function updateGestureTrail(position) {
+  // Add current position to trail
+  gestureTrail.push({
+    position: position.clone(),
+    lifetime: 30
+  });
+
+  // Limit trail length
+  if (gestureTrail.length > 20) {
+    gestureTrail.shift();
+  }
+
+  // Update trail lifetimes
+  gestureTrail.forEach((point, index) => {
+    point.lifetime--;
+    if (point.lifetime <= 0) {
+      gestureTrail.splice(index, 1);
+    }
+  });
+}
+
+// Draw gesture trail on overlay
+function drawGestureTrail() {
+  if (gestureTrail.length < 2) return;
+
+  overlayCtx.save();
+  overlayCtx.lineWidth = 3;
+  overlayCtx.lineJoin = 'round';
+  overlayCtx.lineCap = 'round';
+  overlayCtx.strokeStyle = 'rgba(6,182,212,0.6)';
+  overlayCtx.shadowColor = '#06b6d4';
+  overlayCtx.shadowBlur = 10;
+
+  overlayCtx.beginPath();
+  gestureTrail.forEach((point, index) => {
+    const alpha = point.lifetime / 30;
+    const w = overlay.width;
+    const h = overlay.height;
+
+    // Convert 3D position back to 2D screen coordinates
+    const screenX = ((point.position.x / 2.4) + 0.5) * w;
+    const screenY = ((-point.position.y / 2.4) + 0.5) * h;
+
+    if (index === 0) {
+      overlayCtx.moveTo(screenX, screenY);
+    } else {
+      overlayCtx.lineTo(screenX, screenY);
+    }
+
+    // Draw point with fading opacity
+    overlayCtx.globalAlpha = alpha;
+    overlayCtx.beginPath();
+    overlayCtx.arc(screenX, screenY, 2, 0, Math.PI * 2);
+    overlayCtx.fill();
+  });
+
+  overlayCtx.globalAlpha = 1;
+  overlayCtx.stroke();
+  overlayCtx.restore();
+}
+
+// Update and animate particles
+function updateParticles() {
+  particles = particles.filter(particle => {
+    if (particle.userData.lifetime <= 0) {
+      scene.remove(particle);
+      return false;
+    }
+
+    // Move particle
+    particle.position.add(particle.userData.velocity);
+    particle.userData.velocity.y -= particle.userData.gravity;
+
+    // Fade out
+    particle.userData.lifetime--;
+    const opacity = particle.userData.lifetime / 60;
+    particle.material.opacity = opacity * 0.8;
+
+    // Scale down
+    const scale = opacity;
+    particle.scale.setScalar(scale);
+
+    return true;
+  });
+}
+
 // handle MediaPipe results
 function onHandsResults(results) {
   if (!results.multiHandLandmarks || !results.multiHandLandmarks.length) {
@@ -371,12 +501,18 @@ function onHandsResults(results) {
     grabbedPosition = object3d.position.clone();
     object3d.material.color.setHex(0xff6b6b); // Red color when grabbed
     statusEl.textContent = 'Status: Object grabbed - Move your hand to move object';
+
+    // Create grab particles
+    createParticles(object3d.position, 0xff6b6b, 15);
   } else if (palmOpenness > GRAB_THRESHOLD + 0.05 && isGrabbed) {
     // Release the object
     isGrabbed = false;
     grabbedPosition = null;
     object3d.material.color.setHex(0x4dd0e1); // Back to cyan
     statusEl.textContent = 'Status: Object released - Object stays in place';
+
+    // Create release particles
+    createParticles(object3d.position, 0x4dd0e1, 20);
   } else if (!isGrabbed) {
     statusEl.textContent = 'Status: Hand detected - Close palm to grab object';
   }

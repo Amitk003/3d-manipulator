@@ -4,8 +4,45 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>3D Gesture Manipulator - Interactive Hand Tracking</title>
+  <meta name="description" content="Interactive 3D Gesture Manipulator - Control 3D objects with hand gestures using MediaPipe and Three.js" />
+  <meta name="keywords" content="3D, gesture control, hand tracking, MediaPipe, Three.js, augmented reality, interactive" />
+  <title>🤏 3D Gesture Manipulator - Interactive Hand Tracking</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* Add loading animation */
+    .loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #071024, #071426);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: opacity 0.5s ease;
+    }
+
+    .loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(6,182,212,0.1);
+      border-top: 3px solid #06b6d4;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 
 <body>
